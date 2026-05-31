@@ -32,7 +32,7 @@ jobs:
       working-directory: ./cardekho.web/cardekho.web
       run: npm install
 
-    # (Optional) Inject frontend secrets into a .env file before building
+    # Inject frontend secrets into a .env file before building
     - name: Create frontend .env file
       working-directory: ./cardekho.web/cardekho.web
       run: echo "API_URL=${{ secrets.API_URL }}" > .env
@@ -46,21 +46,36 @@ jobs:
     - name: List build files
       run: ls -la ./cardekho.web/cardekho.web/dist
 
-    # ── SCP source code (build artifacts + backend + Dockerfile) ────────
-    - name: Copy source to server
+    # Set up QEMU for cross-platform emulation
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    # Set up Docker Buildx for multi-platform builds
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Build Docker image targeting ARM64 (matching your VM)
+    - name: Build Docker image
+      run: |
+        docker buildx build --platform linux/arm64 -t prakharsingh:latest --load ./
+
+    # Save Docker image as tar for deployment
+    - name: Save Docker image as tar
+      run: docker save prakharsingh:latest -o prakharsingh.tar
+
+    # ── SCP tar to VM ────────────────────────────────────────────────────
+    - name: Deploy Docker image to VM
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.VM_HOST }}
         username: ${{ secrets.VM_USERNAME }}
         key: ${{ secrets.VM_SSH_KEY }}
         port: ${{ secrets.VM_PORT }}
-        # Note: No trailing slashes! This ensures SCP preserves the directories instead of unpacking their contents.
-        source: "cardekho.api,cardekho.web/cardekho.web/dist,Dockerfile"
-        target: "/tmp/cardekho-source"
-        overwrite: true
+        source: "prakharsingh.tar"
+        target: "/tmp"
 
-    # ── Build + Deploy + Health Check + Rollback ──────────
-    - name: Build, deploy and verify on server
+    # ── Load + Deploy + Health Check + Rollback ──────────────────────────
+    - name: Load, deploy and verify on VM
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.VM_HOST }}
@@ -71,8 +86,6 @@ jobs:
         script: |
           set -eo pipefail
 
-          SOURCE_DIR="/tmp/cardekho-source"
-
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           # PHASE 1 — PRE-FLIGHT CHECKS
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -81,6 +94,12 @@ jobs:
           echo "══════════════════════════════════════════"
 
           sudo docker --version || { echo "❌ Docker not installed"; exit 1; }
+
+          if [ ! -f "/tmp/prakharsingh.tar" ]; then
+            echo "❌ prakharsingh.tar not found in /tmp — SCP may have failed"
+            exit 1
+          fi
+          echo "✅ Image tar present"
 
           # Check disk space (require at least 2 GB free)
           AVAILABLE_KB=$(df /var/lib/docker --output=avail | tail -1 | tr -d ' ')
@@ -91,53 +110,39 @@ jobs:
             AVAILABLE_KB=$(df /var/lib/docker --output=avail | tail -1 | tr -d ' ')
             if [ "$AVAILABLE_KB" -lt "$REQUIRED_KB" ]; then
               echo "❌ Still only $(($AVAILABLE_KB / 1024))MB free after cleanup. Aborting."
-              sudo rm -rf $SOURCE_DIR
+              rm -f /tmp/prakharsingh.tar
               exit 1
             fi
           fi
           echo "✅ Disk space OK — $(($AVAILABLE_KB / 1024))MB free"
 
-          if [ ! -f "$SOURCE_DIR/Dockerfile" ]; then
-            echo "❌ Dockerfile not found at $SOURCE_DIR. SCP may have failed."
-            exit 1
-          fi
-
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          # PHASE 2 — TAG ROLLBACK IMAGES
+          # PHASE 2 — TAG ROLLBACK IMAGE
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           echo ""
           echo "══════════════════════════════════════════"
-          echo "  PHASE 2: TAGGING ROLLBACK IMAGES"
+          echo "  PHASE 2: TAGGING ROLLBACK IMAGE"
           echo "══════════════════════════════════════════"
 
-          # Save current working image so we can restore on failure
           sudo docker tag prakharsingh:latest prakharsingh:rollback 2>/dev/null \
             && echo "✅ Tagged prakharsingh:rollback" \
-            || echo "ℹ️  No existing image (first deploy?)"
+            || echo "ℹ️  No existing image to tag (first deploy?)"
 
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          # PHASE 3 — BUILD IMAGE ON SERVER (Native ARM64)
+          # PHASE 3 — LOAD NEW IMAGE
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           echo ""
           echo "══════════════════════════════════════════"
-          echo "  PHASE 3: BUILDING IMAGE ON SERVER"
+          echo "  PHASE 3: LOADING IMAGE"
           echo "══════════════════════════════════════════"
 
-          cd $SOURCE_DIR
-
-          # Print the directory structure to the logs to help debug if files are ever missing
-          echo "Files in build context:"
-          ls -la
-
-          # Build image utilizing local Docker cache
-          if ! sudo docker build -t prakharsingh:latest .; then
-            echo ""
-            echo "❌ BUILD FAILED — old container is still running (no downtime)"
-            sudo rm -rf $SOURCE_DIR
+          if ! sudo docker load -i /tmp/prakharsingh.tar; then
+            echo "❌ LOAD FAILED — old container is still running (no downtime)"
+            rm -f /tmp/prakharsingh.tar
             sudo docker rmi prakharsingh:rollback 2>/dev/null || true
             exit 1
           fi
-          echo "✅ Image built successfully"
+          echo "✅ Image loaded successfully"
 
           # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           # PHASE 4 — DEPLOY NEW CONTAINER
@@ -150,7 +155,7 @@ jobs:
           sudo docker stop prakharsingh 2>/dev/null || true
           sudo docker rm prakharsingh 2>/dev/null || true
 
-          sudo docker run -d --name prakharsingh -p 10000:10000 \
+          sudo docker run -d --name prakharsingh -p 10000:80 \
             --restart unless-stopped \
             --env-file ~/.env \
             prakharsingh:latest
@@ -172,7 +177,7 @@ jobs:
           for i in $(seq 1 $MAX_ATTEMPTS); do
             sleep $WAIT_SECONDS
             STATUS=$(sudo docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' prakharsingh 2>/dev/null || echo "not-found")
-            
+
             echo "  Attempt $i/$MAX_ATTEMPTS — status: $STATUS"
 
             if [ "$STATUS" = "exited" ] || [ "$STATUS" = "not-found" ]; then
@@ -198,13 +203,18 @@ jobs:
             if sudo docker image inspect prakharsingh:rollback >/dev/null 2>&1; then
               echo "Restoring previous image..."
               sudo docker tag prakharsingh:rollback prakharsingh:latest
-              sudo docker run -d --name prakharsingh -p 10000:10000 \
+              sudo docker run -d --name prakharsingh -p 10000:80 \
                 --restart unless-stopped \
-                --env-file ~/.env prakharsingh:latest
+                --env-file ~/.env \
+                prakharsingh:latest
+              echo "⚠️  Rollback complete — previous version restored"
+            else
+              echo "⚠️  No rollback image available — service is down"
             fi
+
             exit 1
           fi
 
-          # Cleanup temp source regardless
+          # Cleanup
           sudo docker image prune -f
-          sudo rm -rf $SOURCE_DIR
+          rm -f /tmp/prakharsingh.tar
