@@ -1,0 +1,237 @@
+<div class="container mt-4">
+  
+  <!-- "Find Me Perfect Car" Hero Section -->
+  <div class="text-center mb-5 bg-light p-5 rounded-4 shadow-sm border">
+    <h1 class="display-5 fw-bold mb-3">Looking for something specific?</h1>
+    <p class="lead mb-4 text-muted">Tell us what you need, and we'll find the perfect match for you.</p>
+    <button class="btn btn-primary btn-lg px-5 py-3 fs-4 shadow rounded-pill" (click)="openPreferencesModal(preferencesModal)">
+      🚗 Find Me the Perfect Car
+    </button>
+  </div>
+
+  <h2>Recommended Cars</h2>
+  
+  <div *ngIf="loading" class="text-center mt-5">
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger mt-3">
+    {{ error }}
+  </div>
+
+  <div class="row mt-4" *ngIf="!loading && !error">
+    <div class="col-md-4 mb-4" *ngFor="let car of cars">
+      <div class="card h-100 shadow-sm" style="cursor: pointer; transition: transform 0.2s;" (click)="openModal(carModal, car)" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        <div class="card-body">
+          <h5 class="card-title">{{ car.car_name }}</h5>
+          <h6 class="card-subtitle mb-2 text-muted">{{ car.brand }} {{ car.model }}</h6>
+          <p class="card-text mb-1">
+            <strong class="fs-5 text-success">{{ car.selling_price | currency:'INR':'symbol':'1.0-0' }}</strong>
+          </p>
+          <div *ngIf="car.llm_reasoning" class="alert alert-info mt-2 mb-2 p-2" style="font-size: 0.85rem;">
+            <strong>✨ Why it's perfect for you:</strong> {{ car.llm_reasoning }}
+          </div>
+          <p class="card-text mb-0 mt-2">
+            <span class="badge bg-secondary me-1">{{ car.fuel_type }}</span>
+            <span class="badge bg-secondary me-1">{{ car.transmission_type }}</span>
+            <span class="badge bg-secondary">{{ car.km_driven | number }} km</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preferences Questionnaire Modal -->
+<ng-template #preferencesModal let-modal>
+  <div class="modal-header border-bottom-0 pb-0">
+    <h3 class="modal-title fw-bold" id="preferences-modal-title">Let's find your perfect match!</h3>
+    <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss('Cross click')"></button>
+  </div>
+  <div class="modal-body p-4">
+    <form *ngIf="metadata">
+      <div class="mb-4">
+        <label class="form-label fw-bold fs-5 mb-3">💰 What's your budget?</label>
+        <select class="form-select form-select-lg shadow-sm" name="budget" [(ngModel)]="preferences.budget">
+          <option value="">Any budget</option>
+          <option value="300000">Under ₹3 Lakhs</option>
+          <option value="500000">Under ₹5 Lakhs</option>
+          <option value="1000000">Under ₹10 Lakhs</option>
+          <option value="2000000">Under ₹20 Lakhs</option>
+          <option value="5000000">Under ₹50 Lakhs</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold fs-5 mb-3">🛣️ What will you mostly use it for?</label>
+        <div class="row g-2">
+          <div class="col-6">
+            <input type="radio" class="btn-check" name="purpose" id="purposeCity" value="city" [(ngModel)]="preferences.purpose">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-start" for="purposeCity">
+              <span class="d-block fs-4 mb-1">🏢</span>
+              <strong>City Commute</strong>
+            </label>
+          </div>
+          <div class="col-6">
+            <input type="radio" class="btn-check" name="purpose" id="purposeHighway" value="highway" [(ngModel)]="preferences.purpose">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-start" for="purposeHighway">
+              <span class="d-block fs-4 mb-1">🛣️</span>
+              <strong>Long Trips</strong>
+            </label>
+          </div>
+          <div class="col-6">
+            <input type="radio" class="btn-check" name="purpose" id="purposeFamily" value="family" [(ngModel)]="preferences.purpose">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-start" for="purposeFamily">
+              <span class="d-block fs-4 mb-1">👨‍👩‍👧‍👦</span>
+              <strong>Family Use</strong>
+            </label>
+          </div>
+          <div class="col-6">
+            <input type="radio" class="btn-check" name="purpose" id="purposeThrill" value="thrill" [(ngModel)]="preferences.purpose">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-start" for="purposeThrill">
+              <span class="d-block fs-4 mb-1">🏎️</span>
+              <strong>Thrill of Driving</strong>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold fs-5 mb-3">🔰 How much driving experience do you have?</label>
+        <div class="row g-2">
+          <div class="col-4">
+            <input type="radio" class="btn-check" name="experience" id="expBeginner" value="beginner" [(ngModel)]="preferences.experience">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-center" for="expBeginner">
+              <span class="d-block fs-4 mb-1">👶</span>
+              <strong>Beginner</strong><br>
+              <small class="text-muted fw-normal" style="font-size: 0.8rem;">Low maintenance</small>
+            </label>
+          </div>
+          <div class="col-4">
+            <input type="radio" class="btn-check" name="experience" id="expIntermediate" value="intermediate" [(ngModel)]="preferences.experience">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-center" for="expIntermediate">
+              <span class="d-block fs-4 mb-1">🚗</span>
+              <strong>Intermediate</strong><br>
+              <small class="text-muted fw-normal" style="font-size: 0.8rem;">Comfortable</small>
+            </label>
+          </div>
+          <div class="col-4">
+            <input type="radio" class="btn-check" name="experience" id="expExpert" value="expert" [(ngModel)]="preferences.experience">
+            <label class="btn btn-outline-primary w-100 p-3 shadow-sm rounded-3 text-center" for="expExpert">
+              <span class="d-block fs-4 mb-1">🏁</span>
+              <strong>Expert</strong><br>
+              <small class="text-muted fw-normal" style="font-size: 0.8rem;">Can handle anything</small>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold fs-5 mb-3">⛽ Any fuel preference?</label>
+        <div class="d-flex flex-wrap gap-2">
+          <input type="radio" class="btn-check" name="fuel" id="fuelAny" value="" [(ngModel)]="preferences.fuel" checked>
+          <label class="btn btn-outline-secondary px-4 py-2 rounded-pill shadow-sm" for="fuelAny">Surprise me!</label>
+
+          <ng-container *ngFor="let f of metadata.fuelTypes; let i = index">
+            <input type="radio" class="btn-check" name="fuel" [id]="'fuel' + i" [value]="f" [(ngModel)]="preferences.fuel">
+            <label class="btn btn-outline-secondary px-4 py-2 rounded-pill shadow-sm" [for]="'fuel' + i">{{ f }}</label>
+          </ng-container>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold fs-5 mb-3">⚙️ Automatic or Manual?</label>
+        <div class="d-flex flex-wrap gap-2">
+          <input type="radio" class="btn-check" name="transmission" id="transAny" value="" [(ngModel)]="preferences.transmission" checked>
+          <label class="btn btn-outline-secondary px-4 py-2 rounded-pill shadow-sm" for="transAny">Doesn't matter</label>
+
+          <ng-container *ngFor="let t of metadata.transmissionTypes; let i = index">
+            <input type="radio" class="btn-check" name="transmission" [id]="'trans' + i" [value]="t" [(ngModel)]="preferences.transmission">
+            <label class="btn btn-outline-secondary px-4 py-2 rounded-pill shadow-sm" [for]="'trans' + i">{{ t }}</label>
+          </ng-container>
+        </div>
+      </div>
+    </form>
+    
+    <div *ngIf="!metadata" class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading preferences...</span>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer border-top-0 pt-0">
+    <button type="button" class="btn btn-light me-2" (click)="modal.dismiss('cancel')">Cancel</button>
+    <button type="button" class="btn btn-primary btn-lg px-5 rounded-pill shadow" (click)="modal.close('submit')">Show Me Cars 🚀</button>
+  </div>
+</ng-template>
+
+<!-- Full Car Details Modal (existing) -->
+<ng-template #carModal let-modal>
+  <div class="modal-header bg-light">
+    <h4 class="modal-title fw-bold" id="modal-basic-title" *ngIf="selectedCar">{{ selectedCar.car_name }}</h4>
+    <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss('Cross click')"></button>
+  </div>
+  <div class="modal-body p-4" *ngIf="selectedCar">
+    <div class="row g-4 fs-5">
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Brand</strong> 
+        {{ selectedCar.brand }}
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Model</strong> 
+        {{ selectedCar.model }}
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Price</strong> 
+        <span class="text-success fw-bold fs-4">{{ selectedCar.selling_price | currency:'INR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Age</strong> 
+        {{ selectedCar.vehicle_age }} Years
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Kilometers Driven</strong> 
+        {{ selectedCar.km_driven | number }} km
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Fuel Type</strong> 
+        {{ selectedCar.fuel_type }}
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Transmission</strong> 
+        {{ selectedCar.transmission_type }}
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Mileage</strong> 
+        {{ selectedCar.mileage }} kmpl
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Engine</strong> 
+        {{ selectedCar.engine }} CC
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Max Power</strong> 
+        {{ selectedCar.max_power }} bhp
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Seats</strong> 
+        {{ selectedCar.seats }}
+      </div>
+      <div class="col-sm-6">
+        <strong class="text-muted fs-6 d-block text-uppercase mb-1">Seller Type</strong> 
+        {{ selectedCar.seller_type }}
+      </div>
+      <div class="col-12 mt-3" *ngIf="selectedCar.llm_reasoning">
+        <div class="p-3 bg-light border border-info rounded">
+          <strong class="text-info d-block mb-1">✨ Why it's perfect for you:</strong>
+          {{ selectedCar.llm_reasoning }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer bg-light border-top-0">
+    <button type="button" class="btn btn-outline-dark px-4" (click)="modal.close('Close click')">Close</button>
+  </div>
+</ng-template>
