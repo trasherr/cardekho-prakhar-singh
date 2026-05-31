@@ -1,36 +1,105 @@
-# This is a basic workflow to help you get started with Actions
+name: Build and Deploy cardekho to Production
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build-and-deploy:
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+    # Node.js for Angular build
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+    # Install Bun if not already installed
+    - name: Install Bun
+      run: |
+        if ! command -v bun &> /dev/null; then
+          npm install -g bun
+        else
+          echo "Bun is already installed."
+        fi
+
+    # Install Angular dependencies
+    - name: Install frontend dependencies
+      working-directory: ./cardekho.web
+      run: npm install
+
+    # (Optional) Inject frontend secrets into a .env file before building
+    - name: Create frontend .env file
+      working-directory: ./cardekho.web
+      run: echo "API_URL=${{ secrets.API_URL }}" > .env
+
+    # Build Angular app
+    - name: Build Angular app
+      working-directory: ./cardekho.web
+      run: npm run build -- --configuration=production
+
+    # List built files for debug
+    - name: List build files
+      run: ls -la ./cardekho.web/dist
+
+    # Set up QEMU for cross-platform emulation
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    # Set up Docker Buildx for multi-platform builds
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Build Docker image targeting ARM64 (matching your VM)
+    - name: Build Docker image
+      run: |
+        docker buildx build --platform linux/arm64 -t prakharsingh:latest --load ./
+
+    # Save Docker image as tar for deployment
+    - name: Save Docker image as tar
+      run: docker save prakharsingh:latest -o prakharsingh.tar
+
+    # Copy Docker image to VM
+    - name: Deploy Docker image to VM
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USERNAME }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        port: ${{ secrets.VM_PORT }}
+        source: "prakharsingh.tar"
+        target: "/tmp"
+
+    # Load Docker image and run container on VM
+    - name: Load and run Docker container on VM
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USERNAME }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        port: ${{ secrets.VM_PORT }}
+        script: |
+          # Check Docker
+          sudo docker --version || (echo "Docker not installed" && exit 1)
+
+          # Load image
+          sudo docker load -i /tmp/prakharsingh.tar
+
+          # Stop & remove existing container safely
+          if sudo docker ps -a --format '{{.Names}}' | grep -q '^prakharsingh$'; then
+            sudo docker stop prakharsingh || true
+            sudo docker rm prakharsingh || true
+          fi
+
+          # Run container and read secrets from an existing .env file on the VM
+          sudo docker run -d --name prakharsingh -p 10000:80 \
+            --env-file ~/.env \
+            prakharsingh:latest
+
+          # Cleanup dangling images and tar
+          sudo docker image prune -f
+          rm -f /tmp/prakharsingh.tar
