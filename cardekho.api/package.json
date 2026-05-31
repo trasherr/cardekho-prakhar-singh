@@ -1,0 +1,29 @@
+{
+  "name": "cardekho.api",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.9.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/google-genai": "^2.1.31",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.3.1",
+    "hono": "^4.12.23",
+    "jsonwebtoken": "^9.0.0",
+    "mongodb": "^7.2.0",
+    "mongoose": "^9.6.3",
+    "zod": "^4.4.3"
+  }
+}
