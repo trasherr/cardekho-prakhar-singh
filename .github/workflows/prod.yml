@@ -54,8 +54,8 @@ jobs:
         username: ${{ secrets.VM_USERNAME }}
         key: ${{ secrets.VM_SSH_KEY }}
         port: ${{ secrets.VM_PORT }}
-        # We only copy the built dist folder, the backend folder, and the Dockerfile
-        source: "cardekho.api/,cardekho.web/cardekho.web/dist/,Dockerfile"
+        # Note: No trailing slashes! This ensures SCP preserves the directories instead of unpacking their contents.
+        source: "cardekho.api,cardekho.web/cardekho.web/dist,Dockerfile"
         target: "/tmp/cardekho-source"
         overwrite: true
 
@@ -124,6 +124,10 @@ jobs:
           echo "══════════════════════════════════════════"
 
           cd $SOURCE_DIR
+
+          # Print the directory structure to the logs to help debug if files are ever missing
+          echo "Files in build context:"
+          ls -la
 
           # Build image utilizing local Docker cache
           if ! sudo docker build -t prakharsingh:latest .; then
