@@ -1,4 +1,4 @@
 export const environment = {
-  baseUrl: 'http://prakharsingh.trivelon.com',
+  baseUrl: 'https://prakharsingh.trivelon.com',
 
 };
