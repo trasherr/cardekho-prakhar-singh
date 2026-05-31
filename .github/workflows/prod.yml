@@ -29,22 +29,22 @@ jobs:
 
     # Install Angular dependencies
     - name: Install frontend dependencies
-      working-directory: ./cardekho.web
+      working-directory: ./cardekho.web/cardekho.web
       run: npm install
 
     # (Optional) Inject frontend secrets into a .env file before building
     - name: Create frontend .env file
-      working-directory: ./cardekho.web
+      working-directory: ./cardekho.web/cardekho.web
       run: echo "API_URL=${{ secrets.API_URL }}" > .env
 
     # Build Angular app
     - name: Build Angular app
-      working-directory: ./cardekho.web
+      working-directory: ./cardekho.web/cardekho.web
       run: npm run build -- --configuration=production
 
     # List built files for debug
     - name: List build files
-      run: ls -la ./cardekho.web/dist
+      run: ls -la ./cardekho.web/cardekho.web/dist
 
     # Set up QEMU for cross-platform emulation
     - name: Set up QEMU
